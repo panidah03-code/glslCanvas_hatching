@@ -23,7 +23,8 @@ uniform sampler2D u_tex7; //Pina
 void main()
 {
     vec2 uv= gl_FragCoord.xy/u_resolution.xy;
-    vec2 vUv=fract(6.0*uv);                        //key
+    vec2 vUv=fract(6.0*uv);
+uv.x *= u_resolution.x / u_resolution.y;//key
     float shading= texture2D(u_tex7, uv).g; //取MonaLisa綠色版作為明亮值
 
 
