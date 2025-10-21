@@ -16,7 +16,7 @@ float rand(vec2 co) {
     return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-// Better halftone mask with antialiasing
+// Better halftone mask with dancing animation
 float halftoneMask(vec2 uv, float val, float angle, float dotSpacing, float dotRadius) {
     // Rotation matrix
     mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
@@ -24,10 +24,24 @@ float halftoneMask(vec2 uv, float val, float angle, float dotSpacing, float dotR
     
     // Create grid
     vec2 grid = floor(uv_rot / dotSpacing) * dotSpacing + dotSpacing * 0.5;
-    float dist = length(uv_rot - grid);
     
-    // Dynamic dot size based on tone value
-    float radius = dotRadius * sqrt(val); // sqrt gives better visual distribution
+    // Add dancing motion to each dot
+    float noise = rand(grid);
+    float timeOffset = noise * 6.28318; // 2*PI for varied timing
+    
+    // Circular dance motion
+    vec2 danceOffset = vec2(
+        sin(u_time * 2.0 + timeOffset) * dotSpacing * 0.3,
+        cos(u_time * 2.5 + timeOffset) * dotSpacing * 0.3
+    );
+    
+    // Apply dance offset to grid position
+    vec2 dancingGrid = grid + danceOffset;
+    float dist = length(uv_rot - dancingGrid);
+    
+    // Dynamic dot size with pulsing
+    float pulse = 0.5 + 0.5 * sin(u_time * 3.0 + noise * 6.28318);
+    float radius = dotRadius * sqrt(val) * (0.8 + 0.4 * pulse);
     
     // Smooth antialiased edges
     return 1.0 - smoothstep(radius - 0.002, radius + 0.002, dist);
