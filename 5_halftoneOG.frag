@@ -64,3 +64,4 @@ void main() {
 
     gl_FragColor = vec4(cmykColor, 1.0);
 }
+
