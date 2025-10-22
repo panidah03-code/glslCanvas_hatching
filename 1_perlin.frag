@@ -1,4 +1,5 @@
 // Basic 2D Perlin-like noise (value noise with gradient hashing)
+
 #ifdef GL_ES
 precision mediump float;
 #endif
@@ -6,6 +7,8 @@ precision mediump float;
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
+uniform int u_patternType; // 0: lava, 1: clouds, 2: marble, 3: wood, 4: camo
+
 
 // Hash function that returns a pseudo-random gradient vector in [-1,1]
 vec2 hash2(vec2 p) {
@@ -62,20 +65,83 @@ float fbm(vec2 p) {
 	return value;
 }
 
-void main() {
-	vec2 uv = gl_FragCoord.xy / u_resolution.xy;
 
-	// scale controls the "zoom" of the noise
+// Lava pattern: animated fiery colors
+vec3 lavaPattern(vec2 uv) {
+	float scale = 5.0;
+	float n = fbm(uv * scale + vec2(u_time * 0.3, u_time * 0.1));
+	float t = smoothstep(0.2, 0.8, n * 0.5 + 0.5);
+	vec3 col = mix(vec3(0.1, 0.0, 0.0), vec3(1.0, 0.5, 0.0), t); // dark red to orange
+	col = mix(col, vec3(1.0, 1.0, 0.0), pow(t, 3.0)); // add yellow highlights
+	return col;
+}
+
+// Clouds pattern: soft white/blue
+vec3 cloudsPattern(vec2 uv) {
 	float scale = 3.0;
+	float n = fbm(uv * scale + vec2(u_time * 0.05));
+	float t = clamp(n * 0.5 + 0.5, 0.0, 1.0);
+	vec3 col = mix(vec3(0.6, 0.8, 1.0), vec3(1.0), pow(t, 1.5)); // blue sky to white
+	return col;
+}
 
-	// sample fbm with a time-based offset for animation
-	float n = fbm(uv * scale + vec2(u_time * 0.1));
+// Marble pattern: sine-warped fbm
+vec3 marblePattern(vec2 uv) {
+	float scale = 6.0;
+	float n = fbm(uv * scale);
+	float m = sin((uv.x + n * 1.5) * 10.0 + u_time * 0.2);
+	float t = clamp(m * 0.5 + 0.5, 0.0, 1.0);
+	vec3 col = mix(vec3(0.9, 0.9, 1.0), vec3(0.5, 0.5, 0.6), t); // white to blue-gray
+	return col;
+}
 
-	// perlinNoise/fbm produces values roughly in the range [-0.5,0.5]
-	// remap to [0,1]
-	float noise = clamp(n * 0.5 + 0.5, 0.0, 1.0);
+// Wood pattern: radial rings using fbm
+vec3 woodPattern(vec2 uv) {
+	float scale = 8.0;
+	vec2 center = vec2(0.5, 0.5);
+	float r = length(uv - center);
+	float n = fbm(uv * scale);
+	float rings = sin((r + n * 0.2) * 30.0);
+	float t = clamp(rings * 0.5 + 0.5, 0.0, 1.0);
+	vec3 col = mix(vec3(0.4, 0.2, 0.05), vec3(0.8, 0.6, 0.2), t); // dark to light brown
+	return col;
+}
 
-	// output grayscale noise
-	vec3 col = vec3(noise);
-	gl_FragColor = vec4(col, 1.0);
+// Camouflage pattern: layered thresholded fbm
+vec3 camoPattern(vec2 uv) {
+	float scale = 5.0;
+	float n1 = fbm(uv * scale);
+	float n2 = fbm(uv * (scale * 0.7) + 10.0);
+	float n3 = fbm(uv * (scale * 1.3) - 20.0);
+	float t1 = step(0.2, n1);
+	float t2 = step(0.0, n2);
+	float t3 = step(-0.1, n3);
+	vec3 col = vec3(0.2, 0.3, 0.1); // base green
+	col = mix(col, vec3(0.5, 0.4, 0.2), t1); // brown
+	col = mix(col, vec3(0.1, 0.1, 0.1), t2); // black
+	col = mix(col, vec3(0.3, 0.5, 0.2), t3); // light green
+	return col;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+
+    // If your runtime sets u_mouse.x=0 when not pressed, this works out of the box
+    float mx = (u_mouse.x <= 0.0) ? 0.0 : u_mouse.x / u_resolution.x;
+    int mode = int(floor(clamp(mx, 0.0, 0.999) * 5.0)); // 0..4
+
+    vec3 col;
+    if (mode == 0) {
+        col = lavaPattern(uv);
+    } else if (mode == 1) {
+        col = cloudsPattern(uv);
+    } else if (mode == 2) {
+        col = marblePattern(uv);
+    } else if (mode == 3) {
+        col = woodPattern(uv);
+    } else {
+        col = camoPattern(uv);
+    }
+
+    gl_FragColor = vec4(col, 1.0);
 }
