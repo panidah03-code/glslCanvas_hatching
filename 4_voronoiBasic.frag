@@ -8,7 +8,8 @@ precision mediump float;
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
-uniform sampler2D u_tex0; //data/MonaLisa.jpg
+
+uniform sampler2D u_tex0; // texture.0 data/MonaLisa.jpg
 //uniform sampler2D u_tex1;
 
 // Cellular noise ("Worley noise") in 2D in GLSL.
@@ -24,7 +25,7 @@ vec3 permute(vec3 x) {
 #define Ko 0.428571428571 // 3/7
 
 vec2 cellularID(vec2 P) {
-    float jit=1.0;
+    float jit=0.0;
     float distFormula=0.0;
     vec2 Pi = mod(floor(P), 289.0);
     vec2 Pf = fract(P);
@@ -76,13 +77,23 @@ float mouseEffect(vec2 uv, vec2 mouse, float size)
 
 void main() {
     vec2 st = gl_FragCoord.xy/u_resolution.xy;          //screen coordinate
-    vec2 mouse=u_mouse/u_resolution;                    //[0~1]
-    float breathing=(exp(sin(u_time*2.0*3.14159/5.0)) - 0.36787944)*0.42545906412; 
-    float value=mouseEffect(st,mouse,0.05*breathing+0.1);
+    vec2 mouse = u_mouse/u_resolution;                  //[0~1]
+    float breathing = (exp(sin(u_time*2.0*3.14159/5.0)) - 0.36787944)*0.42545906412;
+    float value = mouseEffect(st, mouse, 0.05*breathing+0.1);
 
-    float sizeBrick=60.0;  //是否＝motionFreq
-    vec2 vo=cellularID(st*sizeBrick)/sizeBrick;
-    vec3 color=texture2D(u_tex0, vo ).rgb;        
+    float info = texture2D(u_tex0, st).g;  //use texture brightness as info
+    vec3 color;
+    float size = 20.0;
+    const int j = 4;
+
+    for (int i = 0; i < j; i++) {
+        vec2 vo = cellularID(st*size)/size;
+        color = mix(color, texture2D(u_tex0, vo).rgb, 0.3);
+        if(info < float(i)/float(j)) break;  // Break based on brightness
+        size *= 2.5;
+    }
+
     gl_FragColor = vec4(vec3(color), 1.0);
 }
+
 
