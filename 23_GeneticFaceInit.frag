@@ -27,7 +27,7 @@ uniform sampler2D u_buffer0;	//FBO from previous iterated frame
 
 //#define SOURCE_COLORS
 #define EVERY_PIXEL_SAME_COLOR
-#define TRIANGLES
+#define CIRCLES
 
 //Randomness code from Martin, here: https://www.shadertoy.com/view/XlfGDS
 float Random_Final(vec2 uv, float seed)
@@ -57,9 +57,9 @@ void main()
     testUV = vec2(1.0, 1.0);   
 #endif
 
-    vec2 triPoint1 = vec2(Random_Final(testUV, iTime), Random_Final(testUV, iTime * 2.0));
-    vec2 triPoint2 = vec2(Random_Final(testUV, iTime * 3.0), Random_Final(testUV, iTime * 4.0));
-    vec2 triPoint3 = vec2(Random_Final(testUV, iTime * 5.0), Random_Final(testUV, iTime * 6.0));
+    // generate a random circle (center + radius)
+    vec2 circleCenter = vec2(Random_Final(testUV, iTime), Random_Final(testUV, iTime * 2.0));
+    float circleRadius = 0.05 + 0.25 * Random_Final(testUV, iTime * 3.0); // radius in normalized coords
 
     vec4 testColor = vec4(Random_Final(testUV, iTime * 10.0),
                           Random_Final(testUV, iTime * 11.0),
@@ -80,8 +80,9 @@ void main()
 
     bool isInTriangle = true;
 
-#ifdef TRIANGLES
-    isInTriangle = pointInTriangle(triPoint1, triPoint2, triPoint3, imageUV); 
+#ifdef CIRCLES
+    // test whether the fragment is inside the random circle
+    isInTriangle = (distance(imageUV, circleCenter) < circleRadius);
 #endif
 
     // original
