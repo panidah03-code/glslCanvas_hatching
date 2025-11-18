@@ -1,9 +1,5 @@
 // 20200220_glsl Genetic Face_v0.frag
-// Title: Genetic Face
-// Reference: https://www.shadertoy.com/view/XsGXWW
-
-//#version 300 es
-//#extension GL_OES_standard_derivatives : enable
+// Title: Genetic Face - Multi-Target Morphing
 
 #ifdef GL_ES
 precision mediump float;
@@ -15,101 +11,115 @@ uniform float u_time;
 
 #define iTime u_time
 #define iResolution u_resolution
-#define iMouse u_mouse
 #define fragCoord gl_FragCoord.xy
-uniform sampler2D u_tex0;		//data/CMH_oil_sad.png
-uniform sampler2D u_tex1;       //data/CMH_oil_joy.png
-uniform sampler2D u_buffer0;	//FBO from previous iterated frame
 
+uniform sampler2D u_tex0; //data/old.jpg
+uniform sampler2D u_tex1; //data/new.jpg
+uniform sampler2D u_buffer0; // Previous frame (Current State)
 
 //==================PASS A
-#if defined( BUFFER_0 )
+#if defined(BUFFER_0)
 
-//#define SOURCE_COLORS
 #define EVERY_PIXEL_SAME_COLOR
 #define CIRCLES
 
-//Randomness code from Martin, here: https://www.shadertoy.com/view/XlfGDS
-float Random_Final(vec2 uv, float seed)
-{
-    float fixedSeed = abs(seed) + 1.0;
-    float x = dot(uv, vec2(12.9898,78.233) * fixedSeed);
+float Random_Final(vec2 uv, float seed) {
+    float fixedSeed = abs(seed) + 1.;
+    float x = dot(uv, vec2(12.9898, 78.233) * fixedSeed);
     return fract(sin(x) * 43758.5453);
 }
 
-//Test if a point is in a triangle
-bool pointInTriangle(vec2 triPoint1, vec2 triPoint2, vec2 triPoint3, vec2 testPoint)
-{
-    float denominator = ((triPoint2.y - triPoint3.y)*(triPoint1.x - triPoint3.x) + (triPoint3.x - triPoint2.x)*(triPoint1.y - triPoint3.y));
-    float a = ((triPoint2.y - triPoint3.y)*(testPoint.x - triPoint3.x) + (triPoint3.x - triPoint2.x)*(testPoint.y - triPoint3.y)) / denominator;
-    float b = ((triPoint3.y - triPoint1.y)*(testPoint.x - triPoint3.x) + (triPoint1.x - triPoint3.x)*(testPoint.y - triPoint3.y)) / denominator;
-    float c = 1.0 - a - b;
- 
-    return 0.0 <= a && a <= 1.0 && 0.0 <= b && b <= 1.0 && 0.0 <= c && c <= 1.0;
+bool pointInCircle(vec2 center, float radius, vec2 testPoint) {
+    return distance(testPoint, center) < radius;
 }
 
-void main()
-{
-    vec2 imageUV  = fragCoord.xy / iResolution.xy;
+void main() {
+    vec2 imageUV = fragCoord.xy / iResolution.xy;
     vec2 testUV = imageUV;
 
-#ifdef EVERY_PIXEL_SAME_COLOR
-    testUV = vec2(1.0, 1.0);   
-#endif
+    #ifdef EVERY_PIXEL_SAME_COLOR
+    testUV = vec2(1., 1.);
+    #endif
 
-    // generate a random circle (center + radius)
-    vec2 circleCenter = vec2(Random_Final(testUV, iTime), Random_Final(testUV, iTime * 2.0));
-    float circleRadius = 0.05 + 0.25 * Random_Final(testUV, iTime * 3.0); // radius in normalized coords
-
-    vec4 testColor = vec4(Random_Final(testUV, iTime * 10.0),
-                          Random_Final(testUV, iTime * 11.0),
-                          Random_Final(testUV, iTime * 12.0),
-                          1.0);
-
-#ifdef SOURCE_COLORS
-    vec2 colorUV = vec2(Random_Final(testUV, iTime * 10.0),
-                        Random_Final(testUV, iTime * 11.0));
-
-    testColor = texture( u_tex1, colorUV );
-#endif
+    // --- TIMING LOGIC FOR MULTI-TARGET ---
+    float timePerImage = 25.0; // Switch image every 20 seconds
     
-    vec4 trueColor = texture2D( u_tex0, imageUV );
-    vec4 prevColor = texture2D( u_buffer0, imageUV );
+    // Calculate "Local Time" (counts 0 to 20, then resets to 0)
+    float localTime = mod(u_time, timePerImage);
+    float phase = floor(u_time / timePerImage);
 
-    gl_FragColor = prevColor;
+    // --- Random Position (Mutation location) ---
+    vec2 tp1 = vec2(Random_Final(testUV, iTime + phase),       Random_Final(testUV, iTime * 2.0 + phase));
+    vec2 tp2 = vec2(Random_Final(testUV, iTime * 3.0 + phase), Random_Final(testUV, iTime * 4.0 + phase));
+    vec2 tp3 = vec2(Random_Final(testUV, iTime * 5.0 + phase), Random_Final(testUV, iTime * 6.0 + phase));
+    vec2 center = (tp1 + tp2 + tp3) / 3.0;
 
-    bool isInTriangle = true;
+    // --- SCALING LOGIC: BIG TO SMALL (RESETTING) ---
+    float progress = clamp(localTime / timePerImage, 0.0, 1.0);
+    float inverseProgress = 1.0 - progress;
+    float sizeCurve = pow(inverseProgress, 2.0);
 
-#ifdef CIRCLES
-    // test whether the fragment is inside the random circle
-    isInTriangle = (distance(imageUV, circleCenter) < circleRadius);
-#endif
+    float startSize = 1.5;
+    float endSize = 0.005;
+    
+    float rnd = Random_Final(testUV, 99.0 + phase);
+    float currentMaxSize = mix(endSize, startSize, sizeCurve);
+    float s = mix(endSize, currentMaxSize, rnd);
 
-    // original
-    /*if(isInTriangle && abs(length(trueColor - testColor)) < abs(length(trueColor - prevColor)))
-    {  gl_FragColor = testColor;}*/
 
-    // modified for forward and backward evolution
-    if(isInTriangle)
-    {
-        float prevDiff = abs(length(trueColor - prevColor));
-        float testDiff = abs(length(trueColor - testColor));
-        float score = prevDiff-testDiff;
-        if(u_time < 20.0 && score < 0.0) gl_FragColor = testColor;          //backwards evolution
-        else if(u_time >= 20.0 && score > 0.0) gl_FragColor = testColor;    //forward evolution
-        
+    // --- Color Generation (Mutation color) ---
+    vec4 testColor = vec4(
+        Random_Final(testUV, iTime * 10.),
+        Random_Final(testUV, iTime * 11.),
+        Random_Final(testUV, iTime * 12.),
+        1.
+    );
+
+    // --- TARGET SELECTION ---
+    vec4 trueColor;
+    if (mod(phase, 2.0) == 0.0) {
+        trueColor = texture2D(u_tex0, imageUV); // Target 1
+    } else {
+        trueColor = texture2D(u_tex1, imageUV); // Target 2
     }
 
+    vec4 prevColor = texture2D(u_buffer0, imageUV);
+    gl_FragColor = prevColor;
+
+    // --- Shape Test ---
+    bool isInside = false;
+
+    #ifdef CIRCLES
+    float radius = s * 0.20; 
+    isInside = pointInCircle(center, radius, imageUV);
+    #endif
+
+    // --- GENETIC ALGORITHM CORE ---
+    if (isInside) {
+        
+        // 1. FITNESS FUNCTION (Error Calculation)
+        // Measure the distance/error in color space (Euclidean distance on RGB vectors)
+        float prevDiff = abs(length(trueColor - prevColor)); // Current Error
+        float testDiff = abs(length(trueColor - testColor)); // Proposed Error
+        
+        // The Score is the fitness value: Improvement = Old_Error - New_Error
+        // If score > 0, the mutation is "fitter" (it's closer to the target color).
+        float score = prevDiff - testDiff;
+
+        // 2. SELECTION RULE (Acceptance/Rejection)
+        // Only accept the mutation (the new circle's color) if it improves the fit.
+        if (score > 0.) {
+            gl_FragColor = testColor; // Selection Rule: ACCEPT (The new color is "fitter")
+        } else {
+            // Rejection: The change is not made, and gl_FragColor remains prevColor.
+        }
+    }
 }
 
-
-//==================Main Pass
 #else
-
-void main()
-{
-    vec2 uv=fragCoord/iResolution.xy;
-    gl_FragColor = texture2D( u_buffer0, uv );
+//==================Main Pass
+void main() {
+    vec2 uv = fragCoord / iResolution.xy;
+    gl_FragColor = texture2D(u_buffer0, uv);
 }
-
 #endif
